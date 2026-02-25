@@ -1,0 +1,13 @@
+torch
+pyro-ppl
+web3
+mlflow
+scikit-learn
+pandas
+numpy
+jupyter
+pyarrow
+python-dotenv
+dagster
+dagster-webserver
+pyyaml
