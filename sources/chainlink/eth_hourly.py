@@ -2,10 +2,10 @@
 """Backfill Chainlink ETH/USD rounds and build hourly OHLC features.
 
 Example:
-  python chainlink_eth_hourly.py \
-    --rpc-url https://eth-mainnet.g.alchemy.com/v2/<key> \
-    --raw-out chainlink_rounds.parquet \
-    --hourly-out ethusd_hourly.parquet
+  python -m sources.chainlink.eth_hourly \
+    --rpc-url https://mainnet.infura.io/v3/<key> \
+    --raw-out data/chainlink_rounds.parquet \
+    --hourly-out data/ethusd_hourly.parquet
 """
 
 from __future__ import annotations
@@ -14,8 +14,10 @@ import argparse
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 import pandas as pd
 from web3 import Web3
 from web3.contract import Contract
@@ -178,13 +180,13 @@ class FeedReader:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Backfill Chainlink rounds and build hourly ETH/USD bars.")
-    parser.add_argument("--rpc-url", default=os.getenv("RPC_URL"), help="Ethereum RPC URL (or set RPC_URL).")
+    parser.add_argument("--rpc-url", default=os.getenv("INFURA_HTTP"), help="Ethereum RPC URL (or set INFURA_HTTP).")
     parser.add_argument("--feed", default=DEFAULT_FEED, help="Chainlink feed proxy address.")
     parser.add_argument("--start", help="UTC start date (YYYY-MM-DD). Older rows are not backfilled.")
     parser.add_argument("--max-rounds", type=int, help="Optional cap on number of rounds to fetch.")
     parser.add_argument("--max-staleness-sec", type=int, default=7200, help="Gap threshold for is_gap flag.")
-    parser.add_argument("--raw-out", default="chainlink_rounds.parquet", help="Output path for raw rounds parquet.")
-    parser.add_argument("--hourly-out", default="ethusd_hourly.parquet", help="Output path for hourly parquet.")
+    parser.add_argument("--raw-out", default="data/chainlink_rounds.parquet", help="Output path for raw rounds parquet.")
+    parser.add_argument("--hourly-out", default="data/ethusd_hourly.parquet", help="Output path for hourly parquet.")
     return parser.parse_args()
 
 
@@ -234,19 +236,25 @@ def build_hourly(df_rounds: pd.DataFrame, max_staleness_sec: int) -> pd.DataFram
     return out[["ts_hour", "open", "high", "low", "close", "n_updates", "staleness_sec", "is_gap"]]
 
 
-def main() -> int:
-    args = parse_args()
+def run_chainlink_eth_hourly(
+    rpc_url: str,
+    feed: str = DEFAULT_FEED,
+    start: str | None = None,
+    max_rounds: int | None = None,
+    max_staleness_sec: int = 7200,
+    raw_out: str = "data/chainlink_rounds.parquet",
+    hourly_out: str = "data/ethusd_hourly.parquet",
+) -> dict[str, str | int | float]:
+    if not rpc_url:
+        print("Missing RPC URL. Pass --rpc-url or set INFURA_HTTP.", file=sys.stderr)
+        raise SystemExit(2)
 
-    if not args.rpc_url:
-        print("Missing RPC URL. Pass --rpc-url or set RPC_URL.", file=sys.stderr)
-        return 2
-
-    w3 = Web3(Web3.HTTPProvider(args.rpc_url))
+    w3 = Web3(Web3.HTTPProvider(rpc_url))
     if not w3.is_connected():
         print("Failed to connect to RPC.", file=sys.stderr)
-        return 2
+        raise SystemExit(2)
 
-    feed_addr = Web3.to_checksum_address(args.feed)
+    feed_addr = Web3.to_checksum_address(feed)
     feed = w3.eth.contract(address=feed_addr, abi=PROXY_ABI)
 
     try:
@@ -258,15 +266,15 @@ def main() -> int:
 
     latest_round_id = int(latest[0])
     min_timestamp = None
-    if args.start:
-        min_timestamp = int(pd.Timestamp(args.start, tz="UTC").timestamp())
+    if start:
+        min_timestamp = int(pd.Timestamp(start, tz="UTC").timestamp())
 
     reader = FeedReader(feed)
-    rounds = reader.backfill(latest_round_id=latest_round_id, min_timestamp=min_timestamp, max_rounds=args.max_rounds)
+    rounds = reader.backfill(latest_round_id=latest_round_id, min_timestamp=min_timestamp, max_rounds=max_rounds)
 
     if not rounds:
         print("No rounds fetched.", file=sys.stderr)
-        return 1
+        raise SystemExit(1)
 
     df = pd.DataFrame([r.__dict__ for r in rounds])
     df = df.sort_values("updated_at").drop_duplicates(subset=["round_id"], keep="last")
@@ -276,15 +284,42 @@ def main() -> int:
 
     raw_cols = ["round_id", "answer", "price", "started_at", "updated_at", "answered_in_round"]
     df_raw = df[raw_cols].copy()
+    # round_id / answered_in_round are uint80 values and can exceed int64 in later feed phases.
+    # Persist them as strings in the raw dump so parquet serialization is stable across engines.
+    df_raw["round_id"] = df_raw["round_id"].map(str)
+    df_raw["answered_in_round"] = df_raw["answered_in_round"].map(str)
 
-    hourly = build_hourly(df_raw, max_staleness_sec=args.max_staleness_sec)
+    hourly = build_hourly(df_raw, max_staleness_sec=max_staleness_sec)
 
-    df_raw.to_parquet(args.raw_out, index=False)
-    hourly.to_parquet(args.hourly_out, index=False)
+    Path(raw_out).parent.mkdir(parents=True, exist_ok=True)
+    Path(hourly_out).parent.mkdir(parents=True, exist_ok=True)
+    df_raw.to_parquet(raw_out, index=False)
+    hourly.to_parquet(hourly_out, index=False)
 
-    print(f"Wrote {len(df_raw)} raw rounds to {args.raw_out}")
-    print(f"Wrote {len(hourly)} hourly rows to {args.hourly_out}")
+    print(f"Wrote {len(df_raw)} raw rounds to {raw_out}")
+    print(f"Wrote {len(hourly)} hourly rows to {hourly_out}")
     print(f"Latest hourly close: {hourly.iloc[-1]['close']:.6f} at {hourly.iloc[-1]['ts_hour']}")
+    return {
+        "raw_rows": int(len(df_raw)),
+        "hourly_rows": int(len(hourly)),
+        "raw_out": raw_out,
+        "hourly_out": hourly_out,
+        "latest_close": float(hourly.iloc[-1]["close"]),
+    }
+
+
+def main() -> int:
+    load_dotenv()
+    args = parse_args()
+    run_chainlink_eth_hourly(
+        rpc_url=args.rpc_url,
+        feed=args.feed,
+        start=args.start,
+        max_rounds=args.max_rounds,
+        max_staleness_sec=args.max_staleness_sec,
+        raw_out=args.raw_out,
+        hourly_out=args.hourly_out,
+    )
     return 0
 
 

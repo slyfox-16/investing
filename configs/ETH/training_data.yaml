@@ -1,0 +1,55 @@
+# Logical asset identifier for this training config.
+asset: ETH
+
+# Pipeline-level controls shared by all sources/jobs.
+pipeline:
+  # Historical start timestamp used by Chainlink and (by default) Deribit IV index pulls.
+  start: "2026-01-01"
+  # Base directory where output files are written/read (relative to repo root if not absolute).
+  data_dir: "data"
+  # Output parquet filenames. These are joined with `pipeline.data_dir` unless absolute paths are provided.
+  outputs:
+    chainlink_raw: "chainlink_rounds.parquet"
+    spot_hourly: "ethusd_hourly.parquet"
+    deribit_iv_index_raw: "deribit_eth_dvol_raw.parquet"
+    deribit_iv_index_hourly: "eth_iv_index_hourly.parquet"
+    deribit_iv_surface_raw: "deribit_eth_option_surface_raw.parquet"
+    deribit_iv_surface_hourly: "eth_iv_surface_hourly.parquet"
+    training: "eth_training_hourly.parquet"
+
+# Per-source pull settings.
+sources:
+  chainlink:
+    # Ethereum RPC endpoint for Chainlink reads. Supports env-var expansion.
+    rpc_url: "${INFURA_HTTP}"
+    # Chainlink feed proxy contract address.
+    feed: "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419"
+    # Gap threshold (seconds) used to set `is_gap` in hourly spot output.
+    max_staleness_sec: 7200
+
+  deribit:
+    # Deribit API base URL.
+    base_url: "https://www.deribit.com"
+    # Asset symbol used by Deribit endpoints.
+    currency: "ETH"
+    # Optional overrides for IV index pull settings.
+    iv_index:
+      # Resolution in minutes for volatility index candles.
+      resolution: "60"
+      # Optional start override for IV index pulls; defaults to `pipeline.start` when omitted.
+      # start: "2021-01-01"
+      # API pull chunk size in hours.
+      chunk_hours: 720
+      # Sleep between API requests (seconds).
+      sleep_sec: 0.15
+      # HTTP timeout (seconds) for IV index requests.
+      timeout_sec: 20
+    iv_surface:
+      # HTTP timeout (seconds) for option snapshot requests.
+      timeout_sec: 20
+      # Minimum number of valid contracts for `quality_flag=ok`.
+      min_contracts: 25
+      # Minimum total open interest for `quality_flag=ok`.
+      min_total_oi: 50.0
+      # Max number of hours to forward-fill missing/low-liquidity surface features.
+      max_staleness_hours: 24

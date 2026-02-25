@@ -1,0 +1,18 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV DAGSTER_MODULE=jobs
+ENV DAGSTER_HOST=0.0.0.0
+ENV DAGSTER_GRPC_PORT=4000
+
+WORKDIR /opt/code
+
+COPY requirements.txt /opt/code/requirements.txt
+RUN pip install --upgrade pip && pip install -r /opt/code/requirements.txt
+
+COPY . /opt/code
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "dagster api grpc -m ${DAGSTER_MODULE} -h ${DAGSTER_HOST} -p ${DAGSTER_GRPC_PORT}"]
