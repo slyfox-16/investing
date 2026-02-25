@@ -4,7 +4,7 @@ asset: ETH
 # Pipeline-level controls shared by all sources/jobs.
 pipeline:
   # Historical start timestamp used by Chainlink and (by default) Deribit IV index pulls.
-  start: "2026-01-01"
+  start: "2026-02-20"
   # Base directory where output files are written/read (relative to repo root if not absolute).
   data_dir: "data"
   # Output parquet filenames. These are joined with `pipeline.data_dir` unless absolute paths are provided.

@@ -19,6 +19,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 import pandas as pd
+import requests
 from web3 import Web3
 from web3.contract import Contract
 from web3.exceptions import ContractLogicError
@@ -246,13 +247,29 @@ def run_chainlink_eth_hourly(
     hourly_out: str = "data/ethusd_hourly.parquet",
 ) -> dict[str, str | int | float]:
     if not rpc_url:
-        print("Missing RPC URL. Pass --rpc-url or set INFURA_HTTP.", file=sys.stderr)
-        raise SystemExit(2)
+        raise RuntimeError("Missing RPC URL. Pass --rpc-url or set INFURA_HTTP.")
+
+    # Probe endpoint first so auth/config errors are explicit in Dagster logs.
+    try:
+        probe = requests.post(
+            rpc_url,
+            json={"jsonrpc": "2.0", "method": "web3_clientVersion", "params": [], "id": 1},
+            timeout=15,
+        )
+        body = probe.text[:240]
+        if probe.status_code == 401 and "invalid project id" in body.lower():
+            raise RuntimeError(
+                "INFURA_HTTP is configured, but Infura returned 'invalid project id'. "
+                "Use a valid active Infura Mainnet endpoint URL."
+            )
+        if probe.status_code >= 400:
+            raise RuntimeError(f"RPC endpoint returned HTTP {probe.status_code}: {body}")
+    except requests.RequestException as exc:
+        raise RuntimeError(f"RPC endpoint request failed: {exc}") from exc
 
     w3 = Web3(Web3.HTTPProvider(rpc_url))
     if not w3.is_connected():
-        print("Failed to connect to RPC.", file=sys.stderr)
-        raise SystemExit(2)
+        raise RuntimeError("Failed to connect to RPC. Verify INFURA_HTTP and network access from the code server.")
 
     feed_addr = Web3.to_checksum_address(feed)
     feed = w3.eth.contract(address=feed_addr, abi=PROXY_ABI)
@@ -261,8 +278,7 @@ def run_chainlink_eth_hourly(
         decimals = int(feed.functions.decimals().call())
         latest = feed.functions.latestRoundData().call()
     except Exception as exc:
-        print(f"Failed reading feed contract: {exc}", file=sys.stderr)
-        return 2
+        raise RuntimeError(f"Failed reading feed contract: {exc}") from exc
 
     latest_round_id = int(latest[0])
     min_timestamp = None
@@ -273,8 +289,7 @@ def run_chainlink_eth_hourly(
     rounds = reader.backfill(latest_round_id=latest_round_id, min_timestamp=min_timestamp, max_rounds=max_rounds)
 
     if not rounds:
-        print("No rounds fetched.", file=sys.stderr)
-        raise SystemExit(1)
+        raise RuntimeError("No Chainlink rounds fetched for the configured start/range.")
 
     df = pd.DataFrame([r.__dict__ for r in rounds])
     df = df.sort_values("updated_at").drop_duplicates(subset=["round_id"], keep="last")

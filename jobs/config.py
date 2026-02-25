@@ -66,6 +66,11 @@ def build_run_config_from_training_config(path: str | Path | None = None) -> dic
     training_out = _output_path(data_dir, str(outputs.get("training", "eth_training_hourly.parquet")))
 
     rpc_url = str(chainlink.get("rpc_url", os.getenv("INFURA_HTTP", "")))
+    if not rpc_url or "${" in rpc_url:
+        raise ValueError(
+            "Chainlink RPC URL is not configured. Set INFURA_HTTP in the Dagster code-location "
+            "environment or provide sources.chainlink.rpc_url in configs/ETH/training_data.yaml."
+        )
 
     return {
         "ops": {

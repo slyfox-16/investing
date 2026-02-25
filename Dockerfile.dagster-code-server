@@ -9,7 +9,9 @@ ENV DAGSTER_GRPC_PORT=4000
 WORKDIR /opt/code
 
 COPY requirements.txt /opt/code/requirements.txt
-RUN pip install --upgrade pip && pip install -r /opt/code/requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r /opt/code/requirements.txt && \
+    pip install dagster-postgres
 
 COPY . /opt/code
 
