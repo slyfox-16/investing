@@ -1,4 +1,4 @@
-# Run `build_eth_training` In Dagster
+# Run OHLC Jobs In Dagster
 
 ## 1) Start Dagster
 
@@ -14,7 +14,7 @@ Dagster loads `jobs.defs` from `jobs/__init__.py`.
 
 In the Dagster UI:
 
-1. Go to job: `build_eth_training`
+1. Go to job: `build_eth_ohlc_data` (single asset) or `build_all_ohlc_data` (master)
 2. Click `Launchpad`
 3. Use either empty config (default YAML path) or optional path override below
 4. Click `Launch Run`
@@ -25,16 +25,26 @@ In the Dagster UI:
 {}
 ```
 
-This loads `configs/ETH/training_data.yaml` automatically (or `TRAINING_DATA_CONFIG` if set).
+For `build_eth_ohlc_data`, this loads `configs/ETH/ohlc_data.yaml` automatically
+(or `OHLC_DATA_CONFIG` if set).
 
-## 4) Optional Launchpad Config: override YAML path
+For `build_all_ohlc_data`, this loads `configs/ohlc_master.yaml` automatically
+(or `OHLC_MASTER_CONFIG` if set).
+
+## 4) Optional Launchpad Config: override YAML path (single asset)
 
 ```yaml
-training_config_path: "/Users/carlos.ortega/investing/configs/ETH/training_data.yaml"
+ohlc_config_path: "/Users/carlos.ortega/investing/configs/ETH/ohlc_data.yaml"
 ```
 
-## 5) Notes
+## 5) Optional Launchpad Config: override YAML path (master)
+
+```yaml
+master_config_path: "/Users/carlos.ortega/investing/configs/ohlc_master.yaml"
+```
+
+## 6) Notes
 
 - Ensure `INFURA_HTTP` is set in your environment (or replace `rpc_url` with a literal URL).
-- Paths inside `training_data.yaml` are relative to repo root unless absolute.
+- Paths inside `ohlc_data.yaml` are relative to repo root unless absolute.
 - You no longer need to paste per-op config in Launchpad.

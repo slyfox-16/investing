@@ -1,6 +1,5 @@
 """Dagster jobs/pipelines."""
 
-from .eth_training import build_eth_training
+from .all_ohlc import build_eth_ohlc_data, build_all_ohlc_data
 
-
-__all__ = ["build_eth_training"]
+__all__ = ["build_eth_ohlc_data", "build_all_ohlc_data"]

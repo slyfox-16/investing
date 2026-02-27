@@ -41,7 +41,7 @@ Then verify in UI:
 
 - `http://saturn-dagster.home`
 - Code location `investing` appears healthy
-- Job `build_eth_training` is visible
+- Jobs `build_eth_ohlc_data` and `build_all_ohlc_data` are visible
 
 ## 4) Optional GraphQL health check
 

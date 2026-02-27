@@ -1,0 +1,4 @@
+assets:
+  - id: eth
+    config_path: "configs/ETH/ohlc_data.yaml"
+    enabled: true

@@ -1,0 +1,20 @@
+# Logical asset identifier for this OHLC config.
+asset: ETH
+
+pipeline:
+  # Historical start timestamp for Chainlink backfill.
+  start: "2025-01-01"
+  # Base directory for pipeline outputs.
+  data_dir: "data"
+  outputs:
+    chainlink_raw: "eth_chainlink_rounds.parquet"
+    ohlc_hourly: "eth_ohlc_hourly.parquet"
+
+sources:
+  chainlink:
+    # Ethereum RPC endpoint for Chainlink reads. Supports env-var expansion.
+    rpc_url: "${INFURA_HTTP}"
+    # Chainlink feed proxy contract address for ETH/USD.
+    feed: "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419"
+    # Gap threshold (seconds) used to set is_gap in hourly output.
+    max_staleness_sec: 7200

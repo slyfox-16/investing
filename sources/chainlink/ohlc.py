@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Backfill Chainlink ETH/USD rounds and build hourly OHLC features.
+"""Backfill Chainlink rounds and build hourly OHLC features for a configured feed.
 
 Example:
-  python -m sources.chainlink.eth_hourly \
+  python -m sources.chainlink.ohlc \
     --rpc-url https://mainnet.infura.io/v3/<key> \
     --raw-out data/chainlink_rounds.parquet \
-    --hourly-out data/ethusd_hourly.parquet
+    --hourly-out data/ohlc_hourly.parquet
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from web3.contract import Contract
 from web3.exceptions import ContractLogicError
 
 # Chainlink ETH / USD mainnet proxy
-DEFAULT_FEED = "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419"
+DEFAULT_ETH_USD_FEED = "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419"
 ROUND_MASK = (1 << 64) - 1
 
 PROXY_ABI = [
@@ -180,14 +180,14 @@ class FeedReader:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Backfill Chainlink rounds and build hourly ETH/USD bars.")
+    parser = argparse.ArgumentParser(description="Backfill Chainlink rounds and build hourly OHLC bars for a configured feed.")
     parser.add_argument("--rpc-url", default=os.getenv("INFURA_HTTP"), help="Ethereum RPC URL (or set INFURA_HTTP).")
-    parser.add_argument("--feed", default=DEFAULT_FEED, help="Chainlink feed proxy address.")
+    parser.add_argument("--feed", default=DEFAULT_ETH_USD_FEED, help="Chainlink feed proxy address.")
     parser.add_argument("--start", help="UTC start date (YYYY-MM-DD). Older rows are not backfilled.")
     parser.add_argument("--max-rounds", type=int, help="Optional cap on number of rounds to fetch.")
     parser.add_argument("--max-staleness-sec", type=int, default=7200, help="Gap threshold for is_gap flag.")
     parser.add_argument("--raw-out", default="data/chainlink_rounds.parquet", help="Output path for raw rounds parquet.")
-    parser.add_argument("--hourly-out", default="data/ethusd_hourly.parquet", help="Output path for hourly parquet.")
+    parser.add_argument("--hourly-out", default="data/ohlc_hourly.parquet", help="Output path for hourly parquet.")
     return parser.parse_args()
 
 
@@ -237,14 +237,14 @@ def build_hourly(df_rounds: pd.DataFrame, max_staleness_sec: int) -> pd.DataFram
     return out[["ts_hour", "open", "high", "low", "close", "n_updates", "staleness_sec", "is_gap"]]
 
 
-def run_chainlink_eth_hourly(
+def run_chainlink_ohlc(
     rpc_url: str,
-    feed: str = DEFAULT_FEED,
+    feed: str = DEFAULT_ETH_USD_FEED,
     start: str | None = None,
     max_rounds: int | None = None,
     max_staleness_sec: int = 7200,
     raw_out: str = "data/chainlink_rounds.parquet",
-    hourly_out: str = "data/ethusd_hourly.parquet",
+    hourly_out: str = "data/ohlc_hourly.parquet",
 ) -> dict[str, str | int | float]:
     if not rpc_url:
         raise RuntimeError("Missing RPC URL. Pass --rpc-url or set INFURA_HTTP.")
@@ -326,7 +326,7 @@ def run_chainlink_eth_hourly(
 def main() -> int:
     load_dotenv()
     args = parse_args()
-    run_chainlink_eth_hourly(
+    run_chainlink_ohlc(
         rpc_url=args.rpc_url,
         feed=args.feed,
         start=args.start,
