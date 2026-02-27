@@ -57,6 +57,11 @@ curl -sS -X POST \
 If this job needs RPC and tracking credentials, inject env vars into the code-location deployment:
 
 - `INFURA_HTTP`
+- `INVESTING_PG_HOST`
+- `INVESTING_PG_PORT`
+- `INVESTING_PG_DB`
+- `INVESTING_PG_USER`
+- `INVESTING_PG_PASSWORD`
 - `MLFLOW_TRACKING_URI`
 - `MLFLOW_TRACKING_USERNAME`
 - `MLFLOW_TRACKING_PASSWORD`

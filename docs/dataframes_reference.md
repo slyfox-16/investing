@@ -1,6 +1,6 @@
 # OHLC Pipeline DataFrame Reference
 
-This document explains the parquet-backed DataFrames produced by the OHLC pull pipeline.
+This document explains the OHLC datasets produced by the pull pipeline.
 
 All timestamps are UTC.
 
@@ -18,10 +18,11 @@ Columns:
 - `updated_at`: Round update timestamp.
 - `answered_in_round`: Answer round id (`uint80`, persisted as string).
 
-## 2) `<asset>_ohlc_hourly_df` (`<asset>_ohlc_hourly.parquet`)
+## 2) `eth_ohlc_hourly` (Postgres table)
 
 What it represents:
-- Hourly OHLC bars derived from raw Chainlink rounds for the configured asset feed.
+- Hourly OHLC bars derived from raw Chainlink rounds.
+- For ETH, default sink is Postgres table `public.eth_ohlc_hourly`.
 
 Grain:
 - 1 row per hour (`ts_hour`).
@@ -35,8 +36,14 @@ Columns:
 - `n_updates`: Count of feed updates in the hour.
 - `staleness_sec`: Seconds between hour-end and latest update at/before hour-end.
 - `is_gap`: True when `staleness_sec > max_staleness_sec`.
+- `ingested_at`: Insert timestamp (defaults to `now()`).
+- `updated_at_ingest`: Last upsert timestamp.
 
 ## Notes
 
 - Asset-specific file names come from `configs/<ASSET>/ohlc_data.yaml`.
 - Output paths are relative to `pipeline.data_dir` unless absolute paths are provided.
+- `pipeline.storage.backend` controls hourly sink (`postgres` or `parquet`).
+- Pipeline write mode is incremental append/upsert with dedupe (`latest pull wins`):
+  - Raw rounds: dedupe key `round_id`
+  - Hourly bars: dedupe key `ts_hour`

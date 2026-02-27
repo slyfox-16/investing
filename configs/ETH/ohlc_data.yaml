@@ -3,9 +3,18 @@ asset: ETH
 
 pipeline:
   # Historical start timestamp for Chainlink backfill.
-  start: "2025-01-01"
+  start: "2025-02-22"
+  # Re-pull this many hours behind latest saved ts_hour on incremental updates.
+  update_overlap_hours: 6
   # Base directory for pipeline outputs.
   data_dir: "data"
+  storage:
+    # Target persistence backend for hourly OHLC output.
+    backend: "postgres"
+    # Prefix for DB env vars: <PREFIX>_HOST/_PORT/_DB/_USER/_PASSWORD.
+    db_env_prefix: "INVESTING_PG"
+    schema: "public"
+    table: "eth_ohlc_hourly"
   outputs:
     chainlink_raw: "eth_chainlink_rounds.parquet"
     ohlc_hourly: "eth_ohlc_hourly.parquet"

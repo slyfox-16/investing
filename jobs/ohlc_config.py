@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -27,6 +27,14 @@ def _expand_env(value: Any) -> Any:
     if isinstance(value, list):
         return [_expand_env(v) for v in value]
     return value
+
+
+def _as_mapping(value: Any, field_name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Invalid '{field_name}' config; expected mapping.")
+    return cast(dict[str, Any], value)
 
 
 def load_ohlc_config(path: str | Path | None = None) -> dict[str, Any]:
@@ -59,18 +67,46 @@ def _output_path(data_dir: Path, filename: str) -> str:
 
 def build_run_config_from_ohlc_config(path: str | Path | None = None) -> dict[str, object]:
     cfg = load_ohlc_config(path)
-    pipeline_cfg = cfg.get("pipeline", {})
-    sources_cfg = cfg.get("sources", {})
-    chainlink_cfg = sources_cfg.get("chainlink", {})
+    pipeline_cfg = _as_mapping(cfg.get("pipeline"), "pipeline")
+    sources_cfg = _as_mapping(cfg.get("sources"), "sources")
+    chainlink_cfg = _as_mapping(sources_cfg.get("chainlink"), "sources.chainlink")
 
     start = str(pipeline_cfg.get("start", "2021-01-01"))
+    update_overlap_hours = int(pipeline_cfg.get("update_overlap_hours", 6))
+    if update_overlap_hours < 0:
+        raise ValueError("pipeline.update_overlap_hours must be >= 0.")
     data_dir = Path(str(pipeline_cfg.get("data_dir", "data")))
     if not data_dir.is_absolute():
         data_dir = REPO_ROOT / data_dir
 
-    outputs = pipeline_cfg.get("outputs", {})
+    outputs = _as_mapping(pipeline_cfg.get("outputs"), "pipeline.outputs")
     chainlink_raw = _output_path(data_dir, str(outputs.get("chainlink_raw", "chainlink_rounds.parquet")))
     ohlc_hourly = _output_path(data_dir, str(outputs.get("ohlc_hourly", "ohlc_hourly.parquet")))
+    storage_cfg = _as_mapping(pipeline_cfg.get("storage"), "pipeline.storage")
+    storage_backend = str(storage_cfg.get("backend", "parquet")).strip().lower()
+    if storage_backend not in {"parquet", "postgres"}:
+        raise ValueError("pipeline.storage.backend must be one of: parquet, postgres")
+    pg_env_prefix = str(storage_cfg.get("db_env_prefix", "INVESTING_PG")).strip().upper()
+    if not pg_env_prefix:
+        raise ValueError("pipeline.storage.db_env_prefix must be non-empty.")
+    pg_schema = str(storage_cfg.get("schema", "public")).strip() or "public"
+    pg_table = str(storage_cfg.get("table", "eth_ohlc_hourly")).strip() or "eth_ohlc_hourly"
+
+    if storage_backend == "postgres":
+        required_envs = [
+            f"{pg_env_prefix}_HOST",
+            f"{pg_env_prefix}_PORT",
+            f"{pg_env_prefix}_DB",
+            f"{pg_env_prefix}_USER",
+            f"{pg_env_prefix}_PASSWORD",
+        ]
+        missing_envs = [k for k in required_envs if not os.getenv(k)]
+        if missing_envs:
+            missing_fmt = ", ".join(missing_envs)
+            raise ValueError(
+                "Postgres storage backend is enabled, but required env vars are missing: "
+                f"{missing_fmt}"
+            )
 
     rpc_url = str(chainlink_cfg.get("rpc_url", os.getenv("INFURA_HTTP", "")))
     if not rpc_url or "${" in rpc_url:
@@ -89,6 +125,11 @@ def build_run_config_from_ohlc_config(path: str | Path | None = None) -> dict[st
                     "raw_out": chainlink_raw,
                     "hourly_out": ohlc_hourly,
                     "max_staleness_sec": int(chainlink_cfg.get("max_staleness_sec", 7200)),
+                    "update_overlap_hours": update_overlap_hours,
+                    "storage_backend": storage_backend,
+                    "pg_env_prefix": pg_env_prefix,
+                    "pg_schema": pg_schema,
+                    "pg_table": pg_table,
                 }
             }
         }

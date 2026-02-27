@@ -12,3 +12,4 @@ dagster
 dagster-webserver
 pyyaml
 statsmodels
+psycopg2-binary
